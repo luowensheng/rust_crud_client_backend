@@ -1,4 +1,4 @@
-```
+```rust
 use rocket::http::*;
 
 use super::{database, types::{Posts, PostInput, JsonAble}};
