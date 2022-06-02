@@ -1,4 +1,4 @@
-use super::types::{Post, Database, Posts};
+use super::types::{Post, Database, DatabaseAble, Posts};
 use lazy_static::lazy_static;
 
 lazy_static! {

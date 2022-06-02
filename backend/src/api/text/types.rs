@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Mutex, ops::{DerefMut, Deref}};
 
-use rocket::{Data, data::{FromData, ToByteUnit, self, ByteUnit}, http::{ContentType, Status}, request, Request, Error};
+use rocket::{Data, data::{FromData, self, ByteUnit}, http::{ContentType, Status}, request, Request, Error};
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -33,30 +33,20 @@ impl<'r> FromData<'r> for PostInput {
             return Forward(data);
         }
 
-        // // Use a configured limit with name 'person' or fallback to default.
         let limit = req.limits().get("text").unwrap_or(ByteUnit::Byte(256));
 
-        // Read the data into a string.
         let string = match data.open(limit).into_string().await {
             Ok(string) if string.is_complete() => string.into_inner(),
             Ok(_) => return Failure((Status::PayloadTooLarge, PostFormError::ParseError)),
             Err(_) => return Failure((Status::InternalServerError, PostFormError::ParseError)),
         };
 
-        // // We store `string` in request-local cache for long-lived borrows.
         let string: &str = request::local_cache!(req, string);
 
-        // // Split the string into two pieces at ':'.
         let (_, content) = match string.find(':') {
             Some(i) => (&string[..i], &string[(i + 2)..string.len()-2]),
             None => return Failure((Status::UnprocessableEntity, PostFormError::ParseError)),
         };
-
-        // // Parse the age.
-        // let age: u16 = match age.parse() {
-        //     Ok(age) => age,
-        //     Err(_) => return Failure((Status::UnprocessableEntity, PostFormError::ParseError)),
-        // };
 
         println!("\n\ncontent=[{}]\n\n", content);
         
@@ -118,8 +108,8 @@ pub trait DatabaseAble {
     fn insert(&self, text: String)->(bool, usize);
     fn insert_by_id(&self, text: String, id: usize)->bool;
     fn get_one(&self, id: usize)->Post;
-    fn update(&mut self, id: usize, text: String)->bool;
-    fn delete(&mut self, id: usize)->bool;
+    fn update(&self, id: usize, text: String)->bool;
+    fn delete(&self, id: usize)->bool;
     fn get_some(&self, ids: Vec<usize>)->Posts;
     fn get_all(&self)->Posts;
 }
@@ -130,14 +120,17 @@ impl Database {
         Database { data: Mutex::new(HashMap::new()) }
 
     }
+}
 
-    pub fn insert(&self, text: String)->(bool, usize){
+impl DatabaseAble for Database {
+
+     fn insert(&self, text: String)->(bool, usize){
             let id = self.deref().lock().unwrap().len();
             (self.insert_by_id(text, id), id)
             
     }
 
-    pub fn insert_by_id(&self, text: String, id: usize)->bool {
+     fn insert_by_id(&self, text: String, id: usize)->bool {
         
         let mut data = self.deref().lock().unwrap();
         let item = data.get(&id);
@@ -152,7 +145,7 @@ impl Database {
         
     }
 
-    pub fn get_one(&self, id: usize)->Post{
+     fn get_one(&self, id: usize)->Post{
 
         match self.deref().lock().unwrap().get(&id) {
             Some(post) => post.clone(),
@@ -161,7 +154,7 @@ impl Database {
         
     }
 
-    pub fn update(&self, id: usize, text: String)->bool{
+     fn update(&self, id: usize, text: String)->bool{
 
         let delete_successful = self.delete(id);
         if delete_successful {
@@ -172,7 +165,7 @@ impl Database {
 
     }
 
-    pub fn delete(&self, id: usize)->bool{
+     fn delete(&self, id: usize)->bool{
         let id_exists = self.get_one(id).id!=0;
         if id_exists {
             self.deref().lock().unwrap().remove(&id);  
@@ -182,7 +175,7 @@ impl Database {
         }
     }
 
-    pub fn get_some(&self, ids: Vec<usize>)->Posts{
+     fn get_some(&self, ids: Vec<usize>)->Posts{
         let mut posts: Posts = vec![];
         for id in ids {
             let post = self.get_one(id);
@@ -193,7 +186,7 @@ impl Database {
         return posts;
     }
 
-    pub fn get_all(&self)->Posts{
+     fn get_all(&self)->Posts{
         let mut posts: Posts = vec![];
  
         for (_, post) in self.deref().lock().unwrap().iter(){
